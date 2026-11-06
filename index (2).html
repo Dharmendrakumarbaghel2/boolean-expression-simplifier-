@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boolean Expression Simplifier</title>
+  <meta name="description" content="Simplify Boolean expressions with Quine–McCluskey, Petrick's method, Karnaugh maps and logic-circuit diagrams.">
+  <style>
+:root {
+  --bg: #f4f5fa; --surface: #ffffff; --surface-2: #eef0f8; --text: #1b1f33; --muted: #62698a;
+  --border: #dfe2ee; --accent: #4f46e5; --accent-soft: #e8e7fd; --good: #15803d; --good-soft: #dcf5e4;
+  --bad: #b91c1c; --bad-soft: #fde4e4; --before: #a5acc9; --after: #4f46e5;
+  --shadow: 0 1px 2px rgba(20,24,50,.06), 0 8px 24px rgba(20,24,50,.05);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1220; --surface: #181c30; --surface-2: #20253e; --text: #e8eaf6; --muted: #98a0c3;
+  --border: #2c3254; --accent: #8b87ff; --accent-soft: #2a2860; --good: #4ade80; --good-soft: #14351f;
+  --bad: #f87171; --bad-soft: #3d1818; --before: #5b6390; --after: #8b87ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+h1, h2, h3, h4 { margin: 0; line-height: 1.25; }
+h2 { font-size: 16px; margin-bottom: 12px; }
+h3 { font-size: 14px; margin-bottom: 10px; }
+h3.spaced { margin-top: 18px; }
+h4 { font-size: 13px; margin-bottom: 6px; color: var(--muted); }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.ov { text-decoration: overline; text-decoration-thickness: 1.5px; }
+
+/* top bar */
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand h1 { font-size: 18px; }
+.brand p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.logo { width: 38px; height: 38px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; font: 700 20px var(--mono); flex: none; }
+.top-actions { display: flex; gap: 8px; flex: none; }
+
+/* layout */
+.layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; max-width: 1360px; margin: 0 auto; padding: 20px 24px; align-items: start; }
+.side { display: grid; gap: 20px; position: sticky; top: 84px; }
+.main > div > * + *, .main > div > .grid-2 + * { margin-top: 20px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.card-head h2 { margin: 0; }
+.empty { text-align: center; padding: 48px 18px; color: var(--muted); }
+.empty h2 { color: var(--text); }
+.scroll { overflow: auto; max-width: 100%; }
+.scroll.tall { max-height: 320px; }
+
+/* form controls */
+label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; }
+.opt { font-weight: 400; color: var(--muted); }
+input[type="text"], select { width: 100%; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: 15px var(--mono); }
+select { font-family: var(--sans); }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+.row { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.row.actions { align-items: stretch; }
+.row.actions select { flex: 1; }
+.lbl { font-size: 13px; font-weight: 600; }
+.btn { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); padding: 9px 14px; border-radius: 9px; font: 600 14px var(--sans); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; padding: 9px 22px; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 5px 10px; font-size: 12.5px; }
+.error { margin-top: 14px; padding: 10px 12px; border-radius: 9px; background: var(--bad-soft); color: var(--bad); font-size: 13.5px; border: 1px solid var(--bad); }
+
+.tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; }
+.tab { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 7px 4px; border-radius: 7px; font: 600 13px var(--sans); cursor: pointer; }
+.tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 9px; padding: 3px; }
+.seg-btn { border: 0; background: transparent; color: var(--muted); padding: 6px 16px; border-radius: 7px; font: 700 13px var(--sans); cursor: pointer; }
+.seg-btn.active { background: var(--accent); color: #fff; }
+
+/* history */
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.history button { width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 8px; padding: 7px 10px; font: 13px var(--mono); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history button:hover { border-color: var(--accent); }
+
+/* hero */
+.hero { background: linear-gradient(135deg, var(--accent-soft), var(--surface) 70%); }
+.hero-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+.badge { font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.badge.ok { background: var(--good-soft); color: var(--good); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.hero-expr { font: 600 clamp(22px, 3.4vw, 34px)/1.35 var(--mono); margin: 12px 0; overflow-wrap: anywhere; }
+.hero-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+
+/* metrics */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 12px; }
+.metric { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+.m-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.m-value { font: 700 22px var(--mono); margin: 2px 0; }
+.m-sub { font-size: 12px; color: var(--muted); }
+
+/* bars */
+.bar-row { margin-bottom: 14px; }
+.bar-label { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+.bar-track { background: var(--surface-2); border-radius: 6px; margin-bottom: 4px; height: 22px; overflow: hidden; }
+.bar { height: 100%; min-width: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font: 700 12px var(--mono); color: #fff; }
+.bar.before { background: var(--before); }
+.bar.after { background: var(--after); }
+.legend-inline { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.sw.before { background: var(--before); }
+.sw.after { background: var(--after); }
+.dist { display: flex; height: 26px; border-radius: 7px; overflow: hidden; background: var(--surface-2); }
+.dist span { display: grid; place-items: center; font: 700 12px var(--mono); color: #fff; min-width: 0; }
+.dist .d1 { background: var(--after); } .dist .d0 { background: var(--before); } .dist .dX { background: #d97706; }
+.dist-legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+
+/* tables */
+.tbl { border-collapse: collapse; font: 13px var(--mono); width: auto; }
+.tbl th, .tbl td { border: 1px solid var(--border); padding: 4px 9px; text-align: center; }
+.tbl th { background: var(--surface-2); position: sticky; top: 0; }
+.tbl td.f1, .tbl tr.row1 td { font-weight: 700; }
+.tbl tr.row1 td { background: var(--accent-soft); }
+.tbl td.fX { color: #d97706; font-weight: 700; }
+.tbl tr.grp-start td { border-top: 2px solid var(--muted); }
+.tbl tr.prime-row td { background: var(--good-soft); }
+.tbl tr.sel td { background: var(--accent-soft); }
+.tbl.compare { width: 100%; }
+.tbl.compare td:first-child, .tbl.compare th:first-child { text-align: left; }
+.tbl .win { color: var(--good); font-weight: 700; }
+.dot { color: var(--muted); }
+.dot.ess { color: var(--accent); font-size: 17px; line-height: 1; }
+.tt-cell { width: 34px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 6px; font: 700 13px var(--mono); cursor: pointer; padding: 3px 0; }
+.tt-cell.v1 { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tt-cell.vX { background: #d97706; color: #fff; border-color: #d97706; }
+.tt-edit { width: 100%; margin-top: 8px; }
+
+/* k-map */
+.kmap { border-collapse: separate; border-spacing: 3px; margin: 0 auto; font-family: var(--mono); }
+.kmap th { font-size: 13px; padding: 4px 8px; color: var(--muted); font-weight: 700; }
+.kmap th.corner { position: relative; width: 74px; height: 50px; background: linear-gradient(to top right, transparent calc(50% - 1px), var(--border) 50%, transparent calc(50% + 1px)); }
+.kmap .cr { position: absolute; top: 3px; right: 6px; }
+.kmap .cl { position: absolute; bottom: 3px; left: 6px; }
+.kmap td { width: 62px; height: 62px; text-align: center; vertical-align: middle; border-radius: 9px; background: var(--surface-2); position: relative; }
+.kmap .mi { position: absolute; top: 3px; left: 6px; font-size: 10px; color: var(--muted); }
+.kmap .cv { font-size: 22px; font-weight: 700; }
+.kmap .cv.v0 { color: var(--muted); font-weight: 400; }
+.kmap .cv.vX { color: #d97706; }
+.kmap-legend { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 5px; font-size: 13px; }
+.kmap-legend .sw { width: 14px; height: 14px; border-radius: 4px; }
+
+/* circuit */
+.wire { fill: none; stroke: var(--text); stroke-width: 1.4; }
+.rail { stroke: var(--muted); stroke-width: 1.2; }
+.gate { fill: var(--surface-2); stroke: var(--text); stroke-width: 1.5; }
+.gdot { fill: var(--text); }
+.ctext { fill: var(--text); font: 600 12px var(--mono); }
+.ctext.small { font-size: 10px; fill: var(--muted); }
+#circuit svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+
+/* steps */
+.step { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; background: var(--surface); }
+.step summary { cursor: pointer; padding: 11px 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.step-n { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font: 700 12px var(--mono); flex: none; }
+.step-body { padding: 4px 16px 16px; }
+.step-body p { margin: 8px 0; }
+.big { font-size: 17px; }
+.result-line { font-weight: 700; }
+.stages { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+
+.foot { text-align: center; color: var(--muted); font-size: 12.5px; padding: 8px 16px 28px; }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .side { position: static; }
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .topbar { padding: 12px 16px; }
+  .brand p { display: none; }
+}
+@media print {
+  .topbar, .side, .foot, #copyBtn { display: none !important; }
+  body { background: #fff; }
+  .layout { display: block; padding: 0; }
+  .card, .metric, .step { box-shadow: none; break-inside: avoid; }
+  .step { display: block; }
+}
+
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">F</div>
+      <div>
+        <h1>Boolean Expression Simplifier</h1>
+        <p>Quine–McCluskey · Petrick’s method · Karnaugh map · Logic circuit</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="printBtn" class="btn ghost" type="button">Print / PDF</button>
+      <button id="themeBtn" class="btn ghost" type="button" aria-label="Toggle light or dark theme">◐ Theme</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="side">
+      <section class="card" id="inputCard">
+        <h2>Input</h2>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-mode="expr" type="button">Expression</button>
+          <button class="tab" data-mode="minterms" type="button">Minterms</button>
+          <button class="tab" data-mode="table" type="button">Truth table</button>
+        </div>
+
+        <div class="panel" data-panel="expr">
+          <label for="exprInput">Boolean expression</label>
+          <input id="exprInput" type="text" autocomplete="off" spellcheck="false" placeholder="A'B + AB' + AB" value="AB + A'C + BC">
+          <p class="hint"><b>+</b> OR · <b>AB</b>, <b>*</b> or <b>&amp;</b> AND · <b>'</b> or <b>!</b> NOT · <b>^</b> XOR · <b>( )</b> grouping. Up to 6 variables; every letter is one variable.</p>
+          <label for="exprDc">Don’t-care minterms <span class="opt">(optional)</span></label>
+          <input id="exprDc" type="text" autocomplete="off" placeholder="e.g. 3, 5-6">
+        </div>
+
+        <div class="panel" data-panel="minterms" hidden>
+          <label for="mtVars">Number of variables</label>
+          <select id="mtVars">
+            <option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option>
+          </select>
+          <label for="mtOnes">Minterms Σm</label>
+          <input id="mtOnes" type="text" autocomplete="off" placeholder="e.g. 0, 1, 2, 5-7" value="0,1,2,5,6,7">
+          <label for="mtDc">Don’t-cares Σd <span class="opt">(optional)</span></label>
+          <input id="mtDc" type="text" autocomplete="off" placeholder="e.g. 10-15">
+        </div>
+
+        <div class="panel" data-panel="table" hidden>
+          <label for="ttVars">Number of variables</label>
+          <select id="ttVars">
+            <option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
+          </select>
+          <p class="hint">Click an output cell to cycle <b>0 → 1 → X</b> (X = don’t care).</p>
+          <div id="ttEditor" class="scroll"></div>
+          <button id="ttClear" class="btn ghost small" type="button">Reset all to 0</button>
+        </div>
+
+        <div class="row">
+          <span class="lbl">Result form</span>
+          <div class="seg" id="formSeg" role="group" aria-label="Result form">
+            <button class="seg-btn active" data-form="SOP" type="button">SOP</button>
+            <button class="seg-btn" data-form="POS" type="button">POS</button>
+          </div>
+        </div>
+
+        <div id="errorBox" class="error" role="alert" hidden></div>
+
+        <div class="row actions">
+          <button id="runBtn" class="btn primary" type="button">Simplify</button>
+          <select id="examples" aria-label="Load an example"><option value="">Load example…</option></select>
+        </div>
+      </section>
+
+      <section class="card" id="historyCard">
+        <div class="card-head">
+          <h2>History</h2>
+          <button id="clearHistory" class="btn ghost small" type="button">Clear</button>
+        </div>
+        <ul id="history" class="history"></ul>
+        <p id="historyEmpty" class="hint">Your recent simplifications appear here.</p>
+      </section>
+    </aside>
+
+    <section class="main">
+      <div id="empty" class="card empty">
+        <h2>Enter a function to begin</h2>
+        <p>Type an expression, list its minterms, or fill in a truth table, then press <b>Simplify</b>.</p>
+      </div>
+
+      <div id="results" hidden>
+        <section class="card hero">
+          <div class="hero-top">
+            <span id="heroLabel" class="pill">Minimal Sum of Products</span>
+            <span id="verifyBadge" class="badge"></span>
+          </div>
+          <div id="heroExpr" class="hero-expr"></div>
+          <div class="hero-foot">
+            <span id="heroSource" class="muted"></span>
+            <button id="copyBtn" class="btn ghost small" type="button">Copy</button>
+          </div>
+        </section>
+
+        <section id="metrics" class="metrics" aria-label="Key figures"></section>
+
+        <div class="grid-2">
+          <section class="card">
+            <h3>Cost: canonical vs minimal</h3>
+            <div id="costBars"></div>
+            <div class="legend-inline"><span><i class="sw before"></i>canonical</span><span><i class="sw after"></i>minimal</span></div>
+          </section>
+          <section class="card">
+            <h3>Truth-table output</h3>
+            <div id="distBar"></div>
+            <h3 class="spaced">SOP vs POS</h3>
+            <div id="compare"></div>
+          </section>
+        </div>
+
+        <div class="grid-2">
+          <section class="card">
+            <h3>Karnaugh map</h3>
+            <div id="kmap" class="scroll"></div>
+            <ul id="kmapLegend" class="kmap-legend"></ul>
+          </section>
+          <section class="card">
+            <h3>Logic circuit</h3>
+            <div id="circuit" class="scroll"></div>
+          </section>
+        </div>
+
+        <section class="card">
+          <h3>Step-by-step solution</h3>
+          <div id="steps"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">Boolean Expression Simplifier · minor project · runs entirely in your browser, nothing is uploaded.</footer>
+
+  <script>
+/*!
+ * Boolean Expression Simplifier — core engine
+ * Parser · truth table · Quine–McCluskey · Petrick's method · SOP/POS · verification · K-map model
+ * Works in the browser (window.BoolEngine) and in Node (module.exports).
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BoolEngine = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var MAX_VARS = 6;
+  var PETRICK_LIMIT = 4000; // max partial products before falling back to a greedy cover
+  var DASH = '-';
+
+  /* ------------------------------------------------------------------ helpers */
+  function toBits(m, n) { return m.toString(2).padStart(n, '0'); }
+  function defaultVars(n) { return 'ABCDEF'.slice(0, n).split(''); }
+  function countChar(s, ch) { var c = 0; for (var i = 0; i < s.length; i++) if (s[i] === ch) c++; return c; }
+  function literalsOf(bits) { return bits.length - countChar(bits, DASH); }
+  function popcountBig(x) { var c = 0; while (x) { if (x & 1n) c++; x >>= 1n; } return c; }
+
+  /** Parse "0, 2, 5-7" into a sorted list of unique integers below `limit`. */
+  function parseIndexList(str, limit, label) {
+    var out = new Set();
+    String(str || '').split(/[,\s;]+/).filter(Boolean).forEach(function (tok) {
+      var m = tok.match(/^(\d+)(?:[-–](\d+))?$/);
+      if (!m) throw new Error('Cannot read "' + tok + '" in ' + label + '. Use numbers or ranges such as 0, 2, 5-7.');
+      var a = Number(m[1]), b = m[2] === undefined ? a : Number(m[2]);
+      if (b < a) throw new Error('Range "' + tok + '" in ' + label + ' is backwards.');
+      for (var i = a; i <= b; i++) {
+        if (i >= limit) throw new Error(label + ': ' + i + ' is out of range (largest valid index is ' + (limit - 1) + ').');
+        out.add(i);
+      }
+    });
+    return Array.from(out).sort(function (x, y) { return x - y; });
+  }
+
+  /* ------------------------------------------------------------------ tokenizer */
+  function tokenize(src) {
+    var out = [];
+    for (var i = 0; i < src.length; i++) {
+      var c = src[i], tk = null;
+      if (/\s/.test(c)) continue;
+      if (/[A-Za-z]/.test(c)) tk = { t: 'VAR', v: c.toUpperCase() };
+      else if (c === '0' || c === '1') tk = { t: 'CONST', v: Number(c) };
+      else if (c === '+' || c === '|') tk = { t: 'OR' };
+      else if (c === '*' || c === '&' || c === '.' || c === '·') tk = { t: 'AND' };
+      else if (c === '^' || c === '⊕') tk = { t: 'XOR' };
+      else if (c === "'" || c === '’') tk = { t: 'POSTNOT' };
+      else if (c === '!' || c === '~' || c === '¬') tk = { t: 'PRENOT' };
+      else if (c === '(') tk = { t: 'LP' };
+      else if (c === ')') tk = { t: 'RP' };
+      else throw new Error('Unexpected character "' + c + '" at position ' + (i + 1) + '.');
+      tk.pos = i; tk.ch = c;
+      out.push(tk);
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ parser
+   * precedence (high → low):  NOT  >  AND (explicit or implicit)  >  XOR  >  OR
+   */
+  function parse(src) {
+    var tokens = tokenize(String(src));
+    if (!tokens.length) throw new Error('Expression is empty.');
+    var p = 0;
+    function peek() { return tokens[p]; }
+    function next() { return tokens[p++]; }
+    function startsUnary(tk) { return tk && (tk.t === 'VAR' || tk.t === 'CONST' || tk.t === 'LP' || tk.t === 'PRENOT'); }
+
+    function parseOr() {
+      var node = parseXor();
+      while (peek() && peek().t === 'OR') { next(); node = { type: 'or', l: node, r: parseXor() }; }
+      return node;
+    }
+    function parseXor() {
+      var node = parseAnd();
+      while (peek() && peek().t === 'XOR') { next(); node = { type: 'xor', l: node, r: parseAnd() }; }
+      return node;
+    }
+    function parseAnd() {
+      var node = parseUnary();
+      while (peek() && (peek().t === 'AND' || startsUnary(peek()))) {
+        if (peek().t === 'AND') next();
+        node = { type: 'and', l: node, r: parseUnary() };
+      }
+      return node;
+    }
+    function parseUnary() {
+      var tk = peek();
+      if (tk && tk.t === 'PRENOT') { next(); return { type: 'not', x: parseUnary() }; }
+      return parsePostfix();
+    }
+    function parsePostfix() {
+      var node = parsePrimary();
+      while (peek() && peek().t === 'POSTNOT') { next(); node = { type: 'not', x: node }; }
+      return node;
+    }
+    function parsePrimary() {
+      var tk = next();
+      if (!tk) throw new Error('The expression ends unexpectedly — an operand is missing.');
+      if (tk.t === 'VAR') return { type: 'var', name: tk.v };
+      if (tk.t === 'CONST') return { type: 'const', value: tk.v };
+      if (tk.t === 'LP') {
+        var node = parseOr();
+        var close = next();
+        if (!close || close.t !== 'RP') throw new Error('Missing closing parenthesis.');
+        return node;
+      }
+      throw new Error('Unexpected "' + tk.ch + '" at position ' + (tk.pos + 1) + '.');
+    }
+
+    var ast = parseOr();
+    if (p < tokens.length) throw new Error('Unexpected "' + tokens[p].ch + '" at position ' + (tokens[p].pos + 1) + '.');
+    return { ast: ast, literalCount: tokens.filter(function (t) { return t.t === 'VAR'; }).length };
+  }
+
+  function collectVars(ast) {
+    var s = new Set();
+    (function walk(n) {
+      if (n.type === 'var') s.add(n.name);
+      else if (n.type === 'not') walk(n.x);
+      else if (n.l) { walk(n.l); walk(n.r); }
+    })(ast);
+    return Array.from(s).sort();
+  }
+
+  function evaluate(node, env) {
+    switch (node.type) {
+      case 'const': return node.value;
+      case 'var':
+        if (!(node.name in env)) throw new Error('Unknown variable ' + node.name);
+        return env[node.name];
+      case 'not': return evaluate(node.x, env) ? 0 : 1;
+      case 'and': return evaluate(node.l, env) & evaluate(node.r, env);
+      case 'or': return evaluate(node.l, env) | evaluate(node.r, env);
+      case 'xor': return evaluate(node.l, env) ^ evaluate(node.r, env);
+    }
+    throw new Error('Invalid expression tree.');
+  }
+
+  /** Output column for all 2^n rows; vars[0] is the most significant bit. */
+  function truthTable(ast, vars) {
+    var n = vars.length, rows = [];
+    for (var i = 0; i < (1 << n); i++) {
+      var env = {};
+      for (var k = 0; k < n; k++) env[vars[k]] = (i >> (n - 1 - k)) & 1;
+      rows.push(evaluate(ast, env));
+    }
+    return rows;
+  }
+
+  /* ------------------------------------------------------------------ term formatting */
+  /**
+   * SOP: product term, bit 1 → X, bit 0 → X'.
+   * POS: sum term built from the complement, bit 1 → X', bit 0 → X.
+   */
+  function termString(bits, vars, form) {
+    var lits = [];
+    for (var i = 0; i < bits.length; i++) {
+      var c = bits[i];
+      if (c === DASH) continue;
+      if (form === 'SOP') lits.push(c === '1' ? vars[i] : vars[i] + "'");
+      else lits.push(c === '1' ? vars[i] + "'" : vars[i]);
+    }
+    if (!lits.length) return form === 'SOP' ? '1' : '0';
+    if (form === 'SOP') return lits.join('');
+    return lits.length === 1 ? lits[0] : '(' + lits.join(' + ') + ')';
+  }
+
+  /* ------------------------------------------------------------------ Quine–McCluskey */
+  function singleDiff(a, b) {
+    var idx = -1;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] === b[i]) continue;
+      if (a[i] === DASH || b[i] === DASH) return -1;
+      if (idx >= 0) return -1;
+      idx = i;
+    }
+    return idx;
+  }
+
+  /** `all` = minterms plus don't-cares. Returns every stage table and all prime implicants. */
+  function runQM(n, all) {
+    var current = all.map(function (m) { return { bits: toBits(m, n), terms: [m], used: false }; });
+    var stages = [], primes = [];
+    while (current.length) {
+      var groups = new Map();
+      current.forEach(function (imp) {
+        var k = countChar(imp.bits, '1');
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(imp);
+      });
+      var keys = Array.from(groups.keys()).sort(function (a, b) { return a - b; });
+      var merged = new Map();
+      keys.forEach(function (k) {
+        var hi = groups.get(k + 1);
+        if (!hi) return;
+        groups.get(k).forEach(function (a) {
+          hi.forEach(function (b) {
+            var d = singleDiff(a.bits, b.bits);
+            if (d < 0) return;
+            a.used = true; b.used = true;
+            var bits = a.bits.slice(0, d) + DASH + a.bits.slice(d + 1);
+            if (!merged.has(bits)) {
+              merged.set(bits, { bits: bits, terms: a.terms.concat(b.terms).sort(function (x, y) { return x - y; }), used: false });
+            }
+          });
+        });
+      });
+      stages.push(keys.map(function (k) {
+        return { ones: k, items: groups.get(k).map(function (i) { return { bits: i.bits, terms: i.terms.slice(), used: i.used }; }) };
+      }));
+      current.forEach(function (i) { if (!i.used) primes.push({ bits: i.bits, terms: i.terms }); });
+      current = Array.from(merged.values());
+    }
+    return { stages: stages, primes: primes };
+  }
+
+  /* ------------------------------------------------------------------ cover selection */
+  function absorb(list) {
+    list.sort(function (a, b) { return popcountBig(a) - popcountBig(b); });
+    var res = [];
+    list.forEach(function (x) {
+      if (!res.some(function (r) { return (r & x) === r; })) res.push(x);
+    });
+    return res;
+  }
+  function bitsOf(mask) {
+    var out = [], i = 0;
+    while (mask) { if (mask & 1n) out.push(i); mask >>= 1n; i++; }
+    return out;
+  }
+
+  function selectCover(primes, target) {
+    var cover = new Map(target.map(function (m) { return [m, []]; }));
+    primes.forEach(function (p, i) { p.terms.forEach(function (t) { if (cover.has(t)) cover.get(t).push(i); }); });
+    var coverCount = {};
+    cover.forEach(function (list, m) { coverCount[m] = list.length; });
+
+    var essential = [];
+    cover.forEach(function (list) { if (list.length === 1 && essential.indexOf(list[0]) < 0) essential.push(list[0]); });
+    essential.sort(function (a, b) { return a - b; });
+
+    var covered = new Set();
+    essential.forEach(function (i) { primes[i].terms.forEach(function (t) { covered.add(t); }); });
+    var remaining = target.filter(function (m) { return !covered.has(m); });
+
+    var petrick = null, chosen = [];
+    if (remaining.length) {
+      var products = [0n], overflow = false;
+      for (var r = 0; r < remaining.length; r++) {
+        var next = new Set();
+        var opts = cover.get(remaining[r]);
+        for (var a = 0; a < products.length; a++) {
+          for (var b = 0; b < opts.length; b++) next.add(products[a] | (1n << BigInt(opts[b])));
+        }
+        products = absorb(Array.from(next));
+        if (products.length > PETRICK_LIMIT) { overflow = true; break; }
+      }
+      var coverRows = remaining.map(function (m) { return { m: m, primes: cover.get(m).slice() }; });
+      if (!overflow) {
+        var lists = products.map(bitsOf);
+        var cost = function (l) { return l.reduce(function (s, i) { return s + primes[i].literals; }, 0); };
+        var best = lists.slice().sort(function (x, y) { return x.length - y.length || cost(x) - cost(y); })[0];
+        chosen = best;
+        petrick = { remaining: remaining, cover: coverRows, products: lists, chosen: best, fallback: false };
+      } else {
+        var unc = new Set(remaining), picks = [];
+        while (unc.size) {
+          var bi = -1, bc = 0, bl = Infinity;
+          primes.forEach(function (p, i) {
+            if (essential.indexOf(i) >= 0 || picks.indexOf(i) >= 0) return;
+            var c = p.terms.filter(function (t) { return unc.has(t); }).length;
+            if (c > bc || (c === bc && c > 0 && p.literals < bl)) { bi = i; bc = c; bl = p.literals; }
+          });
+          if (bi < 0) break;
+          picks.push(bi);
+          primes[bi].terms.forEach(function (t) { unc.delete(t); });
+        }
+        chosen = picks;
+        petrick = { remaining: remaining, cover: coverRows, products: [], chosen: picks, fallback: true };
+      }
+    }
+    var selected = essential.concat(chosen).sort(function (a, b) { return a - b; });
+    return { essential: essential, selected: selected, remaining: remaining, petrick: petrick, coverCount: coverCount };
+  }
+
+  /* ------------------------------------------------------------------ minimisation */
+  /**
+   * Minimise one form. For 'SOP' target = minterms; for 'POS' target = the 0-entries
+   * (we minimise F' and complement the result with De Morgan).
+   */
+  function minimize(vars, target, dcs, form) {
+    var n = vars.length;
+    var res = {
+      form: form, target: target.slice(), dcs: dcs.slice(),
+      canonicalLiterals: target.length * n, canonicalTerms: target.length,
+      stages: [], primes: [], discarded: 0, essential: [], selected: [], selectedPrimes: [],
+      petrick: null, remaining: [], coverCount: {}, terms: [], expression: '', sopOfTarget: '',
+      constant: null, literals: 0, termCount: 0, gates: { first: 0, second: 0, not: 0 }
+    };
+    if (!target.length) {
+      res.constant = form === 'SOP' ? 0 : 1;
+      res.expression = String(res.constant);
+      res.sopOfTarget = '0';
+      return res;
+    }
+
+    var all = Array.from(new Set(target.concat(dcs))).sort(function (a, b) { return a - b; });
+    var qm = runQM(n, all);
+    var tset = new Set(target);
+    var kept = qm.primes
+      .filter(function (p) { return p.terms.some(function (t) { return tset.has(t); }); })
+      .sort(function (a, b) { return a.terms[0] - b.terms[0] || (a.bits < b.bits ? -1 : 1); });
+    var primes = kept.map(function (p, i) {
+      return {
+        id: 'P' + (i + 1), bits: p.bits, terms: p.terms, literals: literalsOf(p.bits),
+        implicant: termString(p.bits, vars, 'SOP'), term: termString(p.bits, vars, form),
+        essential: false, selected: false
+      };
+    });
+    var sel = selectCover(primes, target);
+    sel.essential.forEach(function (i) { primes[i].essential = true; });
+    sel.selected.forEach(function (i) { primes[i].selected = true; });
+
+    res.stages = qm.stages;
+    res.primes = primes;
+    res.discarded = qm.primes.length - primes.length;
+    res.essential = sel.essential;
+    res.selected = sel.selected;
+    res.remaining = sel.remaining;
+    res.petrick = sel.petrick;
+    res.coverCount = sel.coverCount;
+    // present terms in variable order (A... first) so results read naturally
+    var rank = { '1': 0, '0': 1, '-': 2 };
+    var firstLit = function (b) { for (var i = 0; i < b.length; i++) if (b[i] !== DASH) return i; return b.length; };
+    res.selectedPrimes = sel.selected.map(function (i) { return primes[i]; }).sort(function (a, b) {
+      var d = firstLit(a.bits) - firstLit(b.bits);
+      if (d) return d;
+      for (var i = 0; i < a.bits.length; i++) { var r = rank[a.bits[i]] - rank[b.bits[i]]; if (r) return r; }
+      return 0;
+    });
+    res.terms = res.selectedPrimes.map(function (p) { return p.term; });
+    res.sopOfTarget = res.selectedPrimes.map(function (p) { return p.implicant; }).join(' + ');
+
+    if (res.selectedPrimes.length === 1 && res.selectedPrimes[0].literals === 0) {
+      res.constant = form === 'SOP' ? 1 : 0;
+      res.expression = String(res.constant);
+      res.termCount = 1;
+      return res;
+    }
+    res.expression = form === 'SOP' ? res.terms.join(' + ') : res.terms.join('');
+    res.termCount = res.selectedPrimes.length;
+    res.literals = res.selectedPrimes.reduce(function (s, p) { return s + p.literals; }, 0);
+    var comp = new Set(), mark = form === 'SOP' ? '0' : '1';
+    res.selectedPrimes.forEach(function (p) {
+      for (var i = 0; i < p.bits.length; i++) if (p.bits[i] === mark) comp.add(i);
+    });
+    res.gates = {
+      first: res.selectedPrimes.filter(function (p) { return p.literals >= 2; }).length,
+      second: res.selectedPrimes.length >= 2 ? 1 : 0,
+      not: comp.size
+    };
+    return res;
+  }
+
+  /** Re-parse the simplified text and compare it with the original on every row (X rows are free). */
+  function verify(vars, outputs, exprText) {
+    var ast = parse(exprText).ast, n = vars.length, bad = [];
+    for (var i = 0; i < outputs.length; i++) {
+      var env = {};
+      for (var k = 0; k < n; k++) env[vars[k]] = (i >> (n - 1 - k)) & 1;
+      var got = evaluate(ast, env);
+      if (outputs[i] !== 'X' && outputs[i] !== got) bad.push(i);
+    }
+    return { ok: bad.length === 0, mismatches: bad };
+  }
+
+  /** Full analysis: both SOP and POS, with verification. outputs entries are 0, 1 or 'X'. */
+  function analyze(vars, outputs) {
+    var n = vars.length, ones = [], zeros = [], dcs = [];
+    outputs.forEach(function (v, i) { (v === 1 ? ones : v === 0 ? zeros : dcs).push(i); });
+    var sop = minimize(vars, ones, dcs, 'SOP');
+    var pos = minimize(vars, zeros, dcs, 'POS');
+    sop.verify = verify(vars, outputs, sop.expression);
+    pos.verify = verify(vars, outputs, pos.expression);
+    return { vars: vars, n: n, outputs: outputs, ones: ones, zeros: zeros, dcs: dcs, sop: sop, pos: pos };
+  }
+
+  /* ------------------------------------------------------------------ Karnaugh map model */
+  function gray(bits) { return bits === 0 ? [''] : bits === 1 ? ['0', '1'] : ['00', '01', '11', '10']; }
+
+  function buildKMap(vars, outputs, groups) {
+    var n = vars.length;
+    if (n < 2 || n > 4) return null;
+    var rBits = Math.floor(n / 2), cBits = n - rBits;
+    var rowLabels = gray(rBits), colLabels = gray(cBits);
+    var cells = rowLabels.map(function (r) {
+      return colLabels.map(function (c) {
+        var m = parseInt(r + c, 2), gs = [];
+        groups.forEach(function (g, gi) { if (g.terms.indexOf(m) >= 0) gs.push(gi); });
+        return { m: m, v: outputs[m], groups: gs };
+      });
+    });
+    return { rowVars: vars.slice(0, rBits).join(''), colVars: vars.slice(rBits).join(''), rowLabels: rowLabels, colLabels: colLabels, cells: cells };
+  }
+
+  return {
+    MAX_VARS: MAX_VARS, parse: parse, collectVars: collectVars, evaluate: evaluate, truthTable: truthTable,
+    parseIndexList: parseIndexList, defaultVars: defaultVars, toBits: toBits, termString: termString,
+    runQM: runQM, minimize: minimize, analyze: analyze, verify: verify, buildKMap: buildKMap
+  };
+});
+
+</script>
+  <script>
+/* Dashboard controller — reads input, calls BoolEngine, renders every panel. */
+(function () {
+  'use strict';
+
+  var E = window.BoolEngine;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  /** Escape, then draw X' as X with an overline. */
+  var exprHTML = function (s) { return esc(s).replace(/([A-F])&#39;/g, '<span class="ov">$1</span>'); };
+
+  /** Result object for the currently selected form (analysis keys are lowercase). */
+  function pick(a) { return state.form === 'SOP' ? a.sop : a.pos; }
+
+  var HUES = [250, 160, 25, 320, 200, 50, 280, 110, 0, 220];
+  var state = { mode: 'expr', form: 'SOP', ttN: 3, tt: [], analysis: null };
+  var HISTORY_KEY = 'bs-history', THEME_KEY = 'bs-theme';
+
+  var EXAMPLES = [
+    { label: "Consensus theorem: AB + A'C + BC", mode: 'expr', expr: "AB + A'C + BC" },
+    { label: "Three terms collapse: A'B + AB' + AB", mode: 'expr', expr: "A'B + AB' + AB" },
+    { label: "De Morgan: (A + B)' + A'B", mode: 'expr', expr: "(A + B)' + A'B" },
+    { label: "Absorption: A + A'B + AB'C", mode: 'expr', expr: "A + A'B + AB'C" },
+    { label: 'XOR chain: A ^ B ^ C', mode: 'expr', expr: 'A ^ B ^ C' },
+    { label: 'Cyclic cover (Petrick demo): Σm(0,1,2,5,6,7)', mode: 'minterms', n: 3, ones: '0,1,2,5,6,7', dc: '' },
+    { label: "Don't-cares: Σm(1,3,7,11,15) + d(0,2,5)", mode: 'minterms', n: 4, ones: '1,3,7,11,15', dc: '0,2,5' },
+    { label: 'BCD digit ≥ 5: Σm(5-9) + d(10-15)', mode: 'minterms', n: 4, ones: '5-9', dc: '10-15' },
+    { label: '5 variables: Σm(0,2,4,6,9,11,13,15,17,21,25,27,29,31)', mode: 'minterms', n: 5, ones: '0,2,4,6,9,11,13,15,17,21,25,27,29,31', dc: '' }
+  ];
+
+  /* ------------------------------------------------------------ theme */
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* storage may be blocked */ }
+  }
+  (function initTheme() {
+    var t = null;
+    try { t = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
+    if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+  $('#themeBtn').addEventListener('click', function () {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  $('#printBtn').addEventListener('click', function () {
+    $$('details.step').forEach(function (d) { d.open = true; });
+    window.print();
+  });
+
+  /* ------------------------------------------------------------ input modes */
+  function setMode(m) {
+    state.mode = m;
+    $$('.tab').forEach(function (b) { b.classList.toggle('active', b.dataset.mode === m); });
+    $$('.panel').forEach(function (p) { p.hidden = p.dataset.panel !== m; });
+    hideError();
+  }
+  $$('.tab').forEach(function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
+
+  function resetTT(n) {
+    state.ttN = n;
+    state.tt = new Array(1 << n).fill(0);
+    renderTT();
+  }
+  function renderTT() {
+    var n = state.ttN, vars = E.defaultVars(n);
+    var h = '<table class="tbl tt-edit"><thead><tr><th>#</th>' + vars.map(function (v) { return '<th>' + v + '</th>'; }).join('') + '<th>F</th></tr></thead><tbody>';
+    state.tt.forEach(function (val, i) {
+      h += '<tr><td>' + i + '</td>' + E.toBits(i, n).split('').map(function (b) { return '<td>' + b + '</td>'; }).join('') +
+        '<td><button type="button" class="tt-cell v' + val + '" data-i="' + i + '">' + val + '</button></td></tr>';
+    });
+    $('#ttEditor').innerHTML = h + '</tbody></table>';
+  }
+  $('#ttEditor').addEventListener('click', function (e) {
+    var b = e.target.closest('.tt-cell');
+    if (!b) return;
+    var i = Number(b.dataset.i), v = state.tt[i];
+    state.tt[i] = v === 0 ? 1 : v === 1 ? 'X' : 0;
+    b.textContent = state.tt[i];
+    b.className = 'tt-cell v' + state.tt[i];
+  });
+  $('#ttVars').addEventListener('change', function () { resetTT(Number(this.value)); });
+  $('#ttClear').addEventListener('click', function () { resetTT(state.ttN); });
+
+  function showError(msg) { var b = $('#errorBox'); b.textContent = msg; b.hidden = false; }
+  function hideError() { $('#errorBox').hidden = true; }
+
+  /** Turn the current input into { vars, outputs, label, payload }. Throws Error with a friendly message. */
+  function readProblem() {
+    var vars, outputs, label, payload, typedLiterals = null;
+    if (state.mode === 'expr') {
+      var src = $('#exprInput').value.trim();
+      if (!src) throw new Error('Type a Boolean expression first.');
+      var parsed = E.parse(src);
+      vars = E.collectVars(parsed.ast);
+      if (!vars.length) throw new Error('The expression needs at least one variable.');
+      if (vars.length > E.MAX_VARS) throw new Error('This tool supports up to ' + E.MAX_VARS + ' variables; the expression has ' + vars.length + ' (' + vars.join(', ') + ').');
+      outputs = E.truthTable(parsed.ast, vars);
+      var dcs = E.parseIndexList($('#exprDc').value, outputs.length, 'Don’t-cares');
+      dcs.forEach(function (d) { outputs[d] = 'X'; });
+      typedLiterals = parsed.literalCount;
+      label = src + (dcs.length ? '  + d(' + dcs.join(',') + ')' : '');
+      payload = { mode: 'expr', expr: src, dc: $('#exprDc').value };
+    } else if (state.mode === 'minterms') {
+      var n = Number($('#mtVars').value);
+      vars = E.defaultVars(n);
+      var ones = E.parseIndexList($('#mtOnes').value, 1 << n, 'Minterms');
+      var dc = E.parseIndexList($('#mtDc').value, 1 << n, 'Don’t-cares');
+      var clash = ones.filter(function (m) { return dc.indexOf(m) >= 0; });
+      if (clash.length) throw new Error('Minterm ' + clash[0] + ' is listed as both a minterm and a don’t-care.');
+      outputs = new Array(1 << n).fill(0);
+      ones.forEach(function (m) { outputs[m] = 1; });
+      dc.forEach(function (m) { outputs[m] = 'X'; });
+      label = 'Σm(' + ones.join(',') + ')' + (dc.length ? ' + d(' + dc.join(',') + ')' : '');
+      payload = { mode: 'minterms', n: n, ones: $('#mtOnes').value, dc: $('#mtDc').value };
+    } else {
+      vars = E.defaultVars(state.ttN);
+      outputs = state.tt.slice();
+      var o = [], d = [];
+      outputs.forEach(function (v, i) { if (v === 1) o.push(i); else if (v === 'X') d.push(i); });
+      label = 'Table ' + vars.length + 'v: Σm(' + o.join(',') + ')' + (d.length ? ' + d(' + d.join(',') + ')' : '');
+      payload = { mode: 'table', n: state.ttN, tt: outputs.slice() };
+    }
+    return { vars: vars, outputs: outputs, label: label, typedLiterals: typedLiterals, payload: payload };
+  }
+
+  function run(addHistory) {
+    hideError();
+    var p;
+    try { p = readProblem(); } catch (err) { showError(err.message); return; }
+    var a = E.analyze(p.vars, p.outputs);
+    a.label = p.label;
+    a.typedLiterals = p.typedLiterals;
+    state.analysis = a;
+    render();
+    if (addHistory) pushHistory(p);
+  }
+
+  /* ------------------------------------------------------------ rendering */
+  function render() {
+    var a = state.analysis;
+    if (!a) return;
+    $('#empty').hidden = true;
+    $('#results').hidden = false;
+    renderHero(a); renderMetrics(a); renderCharts(a); renderKMap(a); renderCircuit(a); renderSteps(a);
+  }
+
+  function renderHero(a) {
+    var r = pick(a);
+    $('#heroLabel').textContent = state.form === 'SOP' ? 'Minimal Sum of Products' : 'Minimal Product of Sums';
+    $('#heroExpr').innerHTML = 'F = ' + exprHTML(r.expression);
+    var badge = $('#verifyBadge');
+    badge.className = 'badge ' + (r.verify.ok ? 'ok' : 'bad');
+    badge.textContent = r.verify.ok ? '✓ Verified equal on all ' + a.outputs.length + ' rows' : '✗ Mismatch on rows ' + r.verify.mismatches.join(', ');
+    var src = a.label + (a.typedLiterals ? '  ·  typed expression: ' + a.typedLiterals + ' literals' : '');
+    $('#heroSource').textContent = src;
+  }
+
+  function metric(label, value, sub) {
+    return '<div class="metric"><div class="m-label">' + label + '</div><div class="m-value">' + value + '</div>' + (sub ? '<div class="m-sub">' + sub + '</div>' : '') + '</div>';
+  }
+  function renderMetrics(a) {
+    var r = pick(a), sop = state.form === 'SOP';
+    var red = r.canonicalLiterals ? Math.round((1 - r.literals / r.canonicalLiterals) * 100) : 0;
+    $('#metrics').innerHTML = [
+      metric('Variables', a.n, esc(a.vars.join(', '))),
+      metric('Minterms · Don’t-cares', a.ones.length + ' · ' + a.dcs.length, a.zeros.length + ' zeros'),
+      metric('Prime implicants', r.primes.length, r.essential.length + ' essential'),
+      metric('Literals', r.canonicalLiterals + ' → ' + r.literals, 'canonical → minimal'),
+      metric('Reduction', red + '%', 'fewer literals'),
+      metric('Gate estimate', (r.gates.first + r.gates.second) + ' + ' + r.gates.not, (sop ? 'AND/OR' : 'OR/AND') + ' gates + NOT')
+    ].join('');
+  }
+
+  function barRow(label, before, after) {
+    var max = Math.max(before, after, 1);
+    return '<div class="bar-row"><div class="bar-label">' + label + '</div>' +
+      '<div class="bar-track"><div class="bar before" style="width:' + (before / max * 100) + '%">' + before + '</div></div>' +
+      '<div class="bar-track"><div class="bar after" style="width:' + (after / max * 100) + '%">' + after + '</div></div></div>';
+  }
+  function renderCharts(a) {
+    var r = pick(a);
+    $('#costBars').innerHTML = barRow('Literals', r.canonicalLiterals, r.literals) +
+      barRow(state.form === 'SOP' ? 'Product terms' : 'Sum terms', r.canonicalTerms, r.termCount);
+
+    var total = a.outputs.length;
+    var seg = function (cls, count) { return count ? '<span class="' + cls + '" style="width:' + (count / total * 100) + '%">' + count + '</span>' : ''; };
+    $('#distBar').innerHTML = '<div class="dist">' + seg('d1', a.ones.length) + seg('d0', a.zeros.length) + seg('dX', a.dcs.length) + '</div>' +
+      '<div class="dist-legend"><span>■ 1s: ' + a.ones.length + '</span><span>■ 0s: ' + a.zeros.length + '</span><span>■ don’t-care: ' + a.dcs.length + '</span></div>';
+
+    var s = a.sop, p = a.pos;
+    var cell = function (x, y) { return x < y ? 'win' : ''; };
+    $('#compare').innerHTML = '<table class="tbl compare"><thead><tr><th></th><th>SOP</th><th>POS</th></tr></thead><tbody>' +
+      '<tr><td>Literals</td><td class="' + cell(s.literals, p.literals) + '">' + s.literals + '</td><td class="' + cell(p.literals, s.literals) + '">' + p.literals + '</td></tr>' +
+      '<tr><td>Terms</td><td class="' + cell(s.termCount, p.termCount) + '">' + s.termCount + '</td><td class="' + cell(p.termCount, s.termCount) + '">' + p.termCount + '</td></tr>' +
+      '<tr><td>Expression</td><td class="mono" style="text-align:left">' + exprHTML(s.expression) + '</td><td class="mono" style="text-align:left">' + exprHTML(p.expression) + '</td></tr></tbody></table>';
+  }
+
+  function hsl(i, a) { return 'hsl(' + HUES[i % HUES.length] + ' 75% 52% / ' + a + ')'; }
+  function cellStyle(groups) {
+    if (!groups.length) return '';
+    var cols = groups.map(function (g) { return hsl(g, 0.4); });
+    var bg = cols.length === 1 ? cols[0] :
+      'linear-gradient(135deg,' + cols.map(function (c, i) { return c + ' ' + (i * 100 / cols.length) + '% ' + ((i + 1) * 100 / cols.length) + '%'; }).join(',') + ')';
+    return 'background:' + bg + ';box-shadow:inset 0 0 0 2px ' + hsl(groups[0], 1);
+  }
+  function renderKMap(a) {
+    var r = pick(a);
+    var km = E.buildKMap(a.vars, a.outputs, r.selectedPrimes);
+    var box = $('#kmap'), legend = $('#kmapLegend');
+    if (!km) {
+      box.innerHTML = '<p class="hint">A Karnaugh map is drawn for 2–4 variables. With ' + a.n + ' variables, use the prime-implicant chart in the step-by-step solution.</p>';
+      legend.innerHTML = '';
+      return;
+    }
+    var h = '<table class="kmap"><thead><tr><th class="corner"><span class="cr">' + km.colVars + '</span><span class="cl">' + km.rowVars + '</span></th>' +
+      km.colLabels.map(function (l) { return '<th>' + l + '</th>'; }).join('') + '</tr></thead><tbody>';
+    km.cells.forEach(function (row, ri) {
+      h += '<tr><th>' + km.rowLabels[ri] + '</th>';
+      row.forEach(function (c) {
+        h += '<td style="' + cellStyle(c.groups) + '" title="m' + c.m + '"><span class="mi">' + c.m + '</span><span class="cv v' + c.v + '">' + c.v + '</span></td>';
+      });
+      h += '</tr>';
+    });
+    box.innerHTML = h + '</tbody></table>';
+    legend.innerHTML = r.selectedPrimes.map(function (p, gi) {
+      return '<li><i class="sw" style="background:' + hsl(gi, 1) + '"></i><span class="mono">' + exprHTML(state.form === 'SOP' ? p.term : p.term) +
+        '</span> <span class="muted">— covers m(' + p.terms.join(', ') + ')' + (state.form === 'POS' ? ' (group of 0s)' : '') + '</span></li>';
+    }).join('');
+  }
+
+  /* ---- logic circuit (two-level AND-OR or OR-AND, drawn as SVG) ---- */
+  function gateShape(type, x, y, w, h) {
+    var d = type === 'AND'
+      ? 'M' + x + ',' + y + ' H' + (x + w * 0.5) + ' A' + (w * 0.5) + ',' + (h / 2) + ' 0 0 1 ' + (x + w * 0.5) + ',' + (y + h) + ' H' + x + ' Z'
+      : 'M' + x + ',' + y + ' Q' + (x + w * 0.5) + ',' + y + ' ' + (x + w) + ',' + (y + h / 2) + ' Q' + (x + w * 0.5) + ',' + (y + h) + ' ' + x + ',' + (y + h) + ' Q' + (x + w * 0.28) + ',' + (y + h / 2) + ' ' + x + ',' + y + ' Z';
+    return '<path class="gate" d="' + d + '"/><text class="ctext small" x="' + (x + w * 0.42) + '" y="' + (y + h / 2 + 3) + '" text-anchor="middle">' + type + '</text>';
+  }
+  function renderCircuit(a) {
+    var r = pick(a), box = $('#circuit');
+    if (r.constant !== null) {
+      box.innerHTML = '<p class="hint">The output is the constant <b>' + r.constant + '</b>, so no gates are needed.</p>';
+      return;
+    }
+    var sop = state.form === 'SOP', g1 = sop ? 'AND' : 'OR', g2 = sop ? 'OR' : 'AND';
+    var compBit = sop ? '0' : '1';
+    var terms = r.selectedPrimes.map(function (p) { return p.bits; });
+    var usedComp = {};
+    terms.forEach(function (b) { for (var i = 0; i < b.length; i++) if (b[i] === compBit) usedComp[i] = true; });
+
+    var rails = [], x = 36;
+    a.vars.forEach(function (v, i) {
+      rails.push({ v: v, t: x, c: usedComp[i] ? x + 22 : null });
+      x += usedComp[i] ? 58 : 40;
+    });
+    var gx = x + 26, gw = 58, y = 80, wires = [], dots = [], shapes = [], outs = [];
+
+    terms.forEach(function (bits) {
+      var lits = [];
+      for (var i = 0; i < bits.length; i++) if (bits[i] !== '-') lits.push({ i: i, comp: bits[i] === compBit });
+      var railOf = function (l) { return l.comp ? rails[l.i].c : rails[l.i].t; };
+      if (lits.length === 1) {
+        var yy = y + 12;
+        wires.push('M' + railOf(lits[0]) + ',' + yy + ' H' + (gx + gw));
+        dots.push([railOf(lits[0]), yy]);
+        outs.push({ x: gx + gw, y: yy });
+        y += 36;
+      } else {
+        var h = Math.max(34, lits.length * 14 + 6);
+        lits.forEach(function (l, k) {
+          var iy = y + (k + 1) * h / (lits.length + 1);
+          wires.push('M' + railOf(l) + ',' + iy + ' H' + gx);
+          dots.push([railOf(l), iy]);
+        });
+        shapes.push(gateShape(g1, gx, y, gw, h));
+        outs.push({ x: gx + gw, y: y + h / 2 });
+        y += h + 22;
+      }
+    });
+
+    var bottom = y, outX = gx + gw, endX, outY, extraBottom = bottom;
+    if (terms.length === 1) {
+      endX = outX + 50; outY = outs[0].y;
+      wires.push('M' + outs[0].x + ',' + outs[0].y + ' H' + endX);
+    } else {
+      var fh = Math.max(36, terms.length * 14 + 6);
+      var fx = outX + 44 + terms.length * 6;
+      var cy = (outs[0].y + outs[outs.length - 1].y) / 2, ft = cy - fh / 2;
+      outs.forEach(function (o, k) {
+        var iy = ft + (k + 1) * fh / (terms.length + 1), mid = outX + 14 + k * 6;
+        wires.push('M' + o.x + ',' + o.y + ' H' + mid + ' V' + iy + ' H' + fx);
+      });
+      shapes.push(gateShape(g2, fx, ft, gw, fh));
+      endX = fx + gw + 40; outY = cy;
+      wires.push('M' + (fx + gw) + ',' + cy + ' H' + endX);
+      extraBottom = Math.max(bottom, ft + fh);
+    }
+
+    var svg = '';
+    rails.forEach(function (rl) {
+      var lx = rl.c ? rl.t + 11 : rl.t;
+      svg += '<text class="ctext" x="' + lx + '" y="16" text-anchor="middle">' + rl.v + '</text>';
+      svg += '<line class="rail" x1="' + rl.t + '" y1="22" x2="' + rl.t + '" y2="' + bottom + '"/>';
+      if (rl.c) {
+        svg += '<path class="wire" d="M' + rl.t + ',36 H' + rl.c + ' V42"/><circle class="gdot" cx="' + rl.t + '" cy="36" r="2.6"/>';
+        svg += '<path class="gate" d="M' + (rl.c - 6) + ',42 L' + (rl.c + 6) + ',42 L' + rl.c + ',54 Z"/><circle class="gate" cx="' + rl.c + '" cy="57" r="3"/>';
+        svg += '<line class="rail" x1="' + rl.c + '" y1="60" x2="' + rl.c + '" y2="' + bottom + '"/>';
+      }
+    });
+    wires.forEach(function (d) { svg += '<path class="wire" d="' + d + '"/>'; });
+    dots.forEach(function (p) { svg += '<circle class="gdot" cx="' + p[0] + '" cy="' + p[1] + '" r="2.8"/>'; });
+    svg += shapes.join('');
+    svg += '<text class="ctext" x="' + (endX + 8) + '" y="' + (outY + 4) + '">F</text>';
+    var W = endX + 36, H = extraBottom + 16;
+    box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Two-level logic circuit for the minimal expression">' + svg + '</svg>' +
+      '<p class="hint" style="text-align:center">' + g1 + ' gates feed one ' + g2 + ' gate · small bubbles are inverters.</p>';
+  }
+
+  /* ---- step-by-step solution ---- */
+  function step(n, title, body, open) {
+    return '<details class="step"' + (open ? ' open' : '') + '><summary><span class="step-n">' + n + '</span>' + title + '</summary><div class="step-body">' + body + '</div></details>';
+  }
+  function renderSteps(a) {
+    var r = pick(a), n = a.n, vars = a.vars, sop = state.form === 'SOP', out = [];
+
+    // 1 truth table
+    var t = '<div class="scroll tall"><table class="tbl"><thead><tr><th>m</th>' + vars.map(function (v) { return '<th>' + v + '</th>'; }).join('') + '<th>F</th></tr></thead><tbody>';
+    a.outputs.forEach(function (o, i) {
+      t += '<tr class="' + (o === 1 ? 'row1' : '') + '"><td>' + i + '</td>' + E.toBits(i, n).split('').map(function (b) { return '<td>' + b + '</td>'; }).join('') + '<td class="f' + o + '">' + o + '</td></tr>';
+    });
+    t += '</tbody></table></div>';
+    out.push(step(1, 'Truth table', '<p>The input is evaluated for all ' + a.outputs.length + ' combinations (' + esc(vars[0]) + ' is the most significant bit).</p>' + t, true));
+
+    // 2 canonical forms
+    var canonSop = a.ones.length ? a.ones.map(function (m) { return E.termString(E.toBits(m, n), vars, 'SOP'); }).join(' + ') : '0';
+    var canonPos = a.zeros.length ? a.zeros.map(function (m) { return E.termString(E.toBits(m, n), vars, 'POS'); }).join('') : '1';
+    var dcTxt = a.dcs.length ? ' + d(' + a.dcs.join(', ') + ')' : '';
+    out.push(step(2, 'Canonical forms',
+      '<p class="mono">F = Σm(' + (a.ones.join(', ') || '—') + ')' + dcTxt + '</p>' +
+      '<p class="mono">F = ΠM(' + (a.zeros.join(', ') || '—') + ')' + dcTxt + '</p>' +
+      '<p><b>Canonical SOP</b> (' + r.canonicalLiterals + ' literals when SOP is chosen):</p><p class="mono" style="overflow-wrap:anywhere">' + exprHTML(canonSop) + '</p>' +
+      '<p><b>Canonical POS</b>:</p><p class="mono" style="overflow-wrap:anywhere">' + exprHTML(canonPos) + '</p>', false));
+
+    // 3 Quine–McCluskey tables
+    var q;
+    if (!r.target.length) {
+      q = '<p>There is nothing to minimise — the function is constant.</p>';
+    } else {
+      q = '<p>' + (sop ? 'The 1-minterms and don’t-cares are grouped by their number of 1s; groups that differ in exactly one bit are merged (that bit becomes “-”).'
+        : 'For POS we minimise <b>F′</b>: the 0-rows play the role of minterms, and De Morgan’s theorem converts the result back to F.') +
+        ' Rows marked ✓ merged into a larger group; rows marked <b>PI</b> could not be merged further and are prime implicants.</p><div class="stages">';
+      r.stages.forEach(function (st, si) {
+        q += '<div><h4>' + (si === 0 ? 'Column 1 — single minterms' : 'Column ' + (si + 1) + ' — groups of ' + Math.pow(2, si)) + '</h4><table class="tbl"><thead><tr><th>#1s</th><th>Minterms</th><th>' + esc(vars.join('')) + '</th><th></th></tr></thead><tbody>';
+        st.forEach(function (g) {
+          g.items.forEach(function (it, k) {
+            q += '<tr class="' + (k === 0 ? 'grp-start' : '') + (it.used ? '' : ' prime-row') + '"><td>' + (k === 0 ? g.ones : '') + '</td><td>' + it.terms.join(', ') + '</td><td>' + it.bits + '</td><td>' + (it.used ? '✓' : 'PI') + '</td></tr>';
+          });
+        });
+        q += '</tbody></table></div>';
+      });
+      q += '</div>';
+      if (r.discarded) q += '<p class="hint">' + r.discarded + ' prime implicant(s) cover only don’t-cares and are ignored.</p>';
+    }
+    out.push(step(3, 'Quine–McCluskey grouping', q, true));
+
+    // 4 prime implicant chart
+    var c;
+    if (!r.primes.length) {
+      c = '<p>No prime implicants are needed.</p>';
+    } else {
+      c = '<p>Each ● shows a minterm covered by a prime implicant. A <span class="dot ess">●</span> in a column with a single dot marks an <b>essential</b> prime implicant (★).</p>' +
+        '<div class="scroll"><table class="tbl"><thead><tr><th>PI</th><th>Bits</th><th>' + (sop ? 'Term' : 'Sum term') + '</th>' + r.target.map(function (m) { return '<th>' + m + '</th>'; }).join('') + '</tr></thead><tbody>';
+      r.primes.forEach(function (p, i) {
+        c += '<tr class="' + (p.selected ? 'sel' : '') + '"><td><b>' + p.id + '</b>' + (p.essential ? ' ★' : '') + '</td><td>' + p.bits + '</td><td>' + exprHTML(p.term) + '</td>';
+        r.target.forEach(function (m) {
+          var has = p.terms.indexOf(m) >= 0;
+          c += '<td>' + (has ? '<span class="dot' + (r.coverCount[m] === 1 ? ' ess' : '') + '">●</span>' : '') + '</td>';
+        });
+        c += '</tr>';
+      });
+      c += '</tbody></table></div><p class="hint">Highlighted rows are the prime implicants chosen for the final answer.</p>';
+    }
+    out.push(step(4, 'Prime-implicant chart', c, true));
+
+    // 5 selecting the cover
+    var idName = function (i) { return r.primes[i].id; };
+    var s5 = '';
+    if (!r.primes.length) {
+      s5 = '<p>Nothing to select.</p>';
+    } else {
+      s5 = '<p><b>Essential prime implicants:</b> ' + (r.essential.length ? r.essential.map(function (i) { return idName(i) + ' (' + exprHTML(r.primes[i].implicant) + ')'; }).join(', ') : 'none') + '.</p>';
+      if (!r.remaining.length) {
+        s5 += '<p>They already cover every minterm, so no further choice is required.</p>';
+      } else {
+        var pk = r.petrick;
+        s5 += '<p>Minterms still uncovered: <b>' + r.remaining.join(', ') + '</b>. ';
+        if (pk.fallback) {
+          s5 += 'The problem is too large for exhaustive Petrick expansion, so a greedy cover (most uncovered minterms first) is used — the result is valid but may not be provably minimal.</p>';
+        } else {
+          s5 += 'Apply <b>Petrick’s method</b>: for each uncovered minterm write the OR of the PIs that cover it, then multiply the sums:</p>' +
+            '<p class="mono big">' + pk.cover.map(function (cv) { return '(' + cv.primes.map(idName).join(' + ') + ')'; }).join('') + '</p>' +
+            '<p>After expanding and applying absorption (X + XY = X) the irredundant covers are: ' +
+            pk.products.map(function (pr) { return '<span class="mono">{' + pr.map(idName).join(', ') + '}</span>'; }).join(' · ') +
+            '. The cheapest — fewest terms, then fewest literals — is <b class="mono">{' + pk.chosen.map(idName).join(', ') + '}</b>.</p>';
+        }
+      }
+    }
+    out.push(step(5, 'Choosing the cover', s5, true));
+
+    // 6 final expression
+    var f = '';
+    if (!sop && r.target.length) {
+      f += '<p>Minimal <b>F′</b> = <span class="mono">' + exprHTML(r.sopOfTarget) + '</span>. Complementing with De Morgan’s theorem turns each product into a sum of complemented literals:</p>';
+    }
+    f += '<p class="result-line mono big">F = ' + exprHTML(r.expression) + '</p>' +
+      '<p>Cost: <b>' + r.literals + '</b> literal(s) in <b>' + r.termCount + '</b> ' + (sop ? 'product' : 'sum') + ' term(s), compared with ' + r.canonicalLiterals + ' literals in the canonical form. ' +
+      (r.verify.ok ? 'The result was re-parsed and checked against the original on every row: <b style="color:var(--good)">equivalent</b>.' : '<b style="color:var(--bad)">Verification failed</b> on rows ' + r.verify.mismatches.join(', ') + '.') + '</p>';
+    out.push(step(6, 'Final minimal expression', f, true));
+
+    $('#steps').innerHTML = out.join('');
+  }
+
+  /* ------------------------------------------------------------ history */
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function saveHistory(list) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ }
+  }
+  function pushHistory(p) {
+    var list = loadHistory().filter(function (h) { return h.label !== p.label; });
+    list.unshift({ label: p.label, payload: p.payload });
+    saveHistory(list.slice(0, 8));
+    renderHistory();
+  }
+  function renderHistory() {
+    var list = loadHistory();
+    $('#historyEmpty').hidden = list.length > 0;
+    $('#clearHistory').hidden = list.length === 0;
+    $('#history').innerHTML = list.map(function (h, i) {
+      return '<li><button type="button" data-i="' + i + '" title="' + esc(h.label) + '">' + esc(h.label) + '</button></li>';
+    }).join('');
+  }
+  $('#history').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var item = loadHistory()[Number(b.dataset.i)];
+    if (item) restore(item.payload, false);
+  });
+  $('#clearHistory').addEventListener('click', function () { saveHistory([]); renderHistory(); });
+
+  function restore(p, addHistory) {
+    setMode(p.mode);
+    if (p.mode === 'expr') {
+      $('#exprInput').value = p.expr; $('#exprDc').value = p.dc || '';
+    } else if (p.mode === 'minterms') {
+      $('#mtVars').value = String(p.n); $('#mtOnes').value = p.ones; $('#mtDc').value = p.dc || '';
+    } else {
+      $('#ttVars').value = String(p.n); state.ttN = p.n; state.tt = p.tt.slice(); renderTT();
+    }
+    run(addHistory);
+  }
+
+  /* ------------------------------------------------------------ wiring */
+  EXAMPLES.forEach(function (ex, i) {
+    var o = document.createElement('option');
+    o.value = String(i); o.textContent = ex.label;
+    $('#examples').appendChild(o);
+  });
+  $('#examples').addEventListener('change', function () {
+    if (this.value === '') return;
+    var ex = EXAMPLES[Number(this.value)];
+    this.value = '';
+    restore(ex.mode === 'expr' ? { mode: 'expr', expr: ex.expr, dc: '' } : { mode: 'minterms', n: ex.n, ones: ex.ones, dc: ex.dc }, true);
+  });
+
+  $$('.seg-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.form = b.dataset.form;
+      $$('.seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+      render();
+    });
+  });
+  $('#runBtn').addEventListener('click', function () { run(true); });
+  ['exprInput', 'exprDc', 'mtOnes', 'mtDc'].forEach(function (id) {
+    $('#' + id).addEventListener('keydown', function (e) { if (e.key === 'Enter') run(true); });
+  });
+  $('#copyBtn').addEventListener('click', function () {
+    var a = state.analysis;
+    if (!a) return;
+    var text = 'F = ' + pick(a).expression, btn = this;
+    var done = function () { btn.textContent = 'Copied ✓'; setTimeout(function () { btn.textContent = 'Copy'; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { btn.textContent = 'Copy failed'; });
+    else btn.textContent = 'Copy not supported';
+  });
+
+  resetTT(3);
+  renderHistory();
+  run(false); // show the default example straight away
+})();
+
+</script>
+</body>
+</html>
